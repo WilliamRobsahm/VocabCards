@@ -13,11 +13,8 @@
         #cards {
             display: flex;
             flex-direction: column;
-            border-radius: 1rem;
-            padding: 1rem;
             border: gray solid thin;
             width: fit-content;
-            font-size: 1.25rem;
 
             & div {
                 display: flex;
@@ -36,8 +33,10 @@
         <label for="language" class="pr-2">Select language to practice: </label>
         <select id="language" name="language"></select>
         <br>
-        <div id="cards"></div>
+        <label for="user_language" class="pr-2">Select your language: </label>
+        <select id="user_language" name="user_language"></select>
         <br>
+        <div id="cards" class="p-2 mb-2"></div>
         <a class="btn btn-primary" id="to-card-page" href="card.html">Add new card</a>
     </main>
 </body>
@@ -57,41 +56,63 @@
         const href = $('#to-card-page').attr('href');
         $('#to-card-page').attr('href', `${href}?${LANG_PARAM}=${SELECTED_LANGUAGE}`);
 
-        loadLanguages($('#language'));
-        loadCards(SELECTED_LANGUAGE, $('#cards'));
+        // Load language options
+        await loadLanguages($('#language'), $('#user_language'));
+
+        // Redirect on target language change
+        $('#language').change(() => { 
+            const lang = $('#language').val();
+            window.location.href = getLanguageRedirectUrl(lang);
+        });
+
+        // Reload cards on user language change
+        $('#user_language').change(() => {
+            const lang = $('#user_language').val();
+            loadCards(SELECTED_LANGUAGE, $('#user_language').val(), $('#cards'));
+        })
+        $('#user_language').change();
     }
 
-    function loadLanguages($input) {
-        API.Languages.getList().then(result => {
+    async function loadLanguages($input, $input2) {
+        return new Promise(async (resolve, reject) => {
+            const result = await API.Languages.getList();
             if(result.success === true) {
-
                 // Reload page with english as the selected language, if no valid language is selected.
                 const allCodes = result.data.map(lang => lang.language_code);
                 if(!allCodes.includes(SELECTED_LANGUAGE)) {
                     window.location.href = getLanguageRedirectUrl('EN');
                 }
- 
+
                 // Add language options
                 $input.append(getLanguageOptions(result.data));
                 $input.val(SELECTED_LANGUAGE);
+
+                $input2.append(getLanguageOptions(result.data));
+                $input2.val('EN');
             }
             else alert("Could not load languages - " + (result.info || "error"));
+            resolve();
         })
-
-        $input.change(() => { 
-            const lang = $input.val();
-            window.location.href = getLanguageRedirectUrl(lang);
-        });
     }
 
-    async function loadCards(lang, $container) {
+    async function loadCards(lang, definition_lang, $container) {
 
-        const defResult = await API.Definitions.getForLanguage(lang, 'EN');
-        if(defResult.success === false) return;
-        const allDefinitions = defResult.data;
+        $container.empty();
+
+        const defResult = await API.Definitions.getForLanguage(lang, definition_lang);
+        const allDefinitions = defResult?.data ?? [];
 
         const result = await API.Cards.getForLanguage(lang);
-        if(result.success === false) return;
+
+        console.log(result.data.length);
+        if(result.data.length === 0) {
+            $container.append('<p>No results</p>');
+            $container.toggleClass('text-secondary', true);
+            return;
+        } else {
+            $container.toggleClass('text-secondary', false);
+        }
+
         result.data.forEach(card => {
             const $row = $('<div>');
             $row.append($('<p>').text(card.word));
